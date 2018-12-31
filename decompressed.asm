@@ -6,10 +6,10 @@ dw 0x0013 ; length of data
 db 0x00 ; header marker byte
 db 0x00 ; program type
 db 0x42,0xc6,0x60,0x8c,0x72,0x73,0x4e,0xac,0x7f,0x48 ; filename
-dw end_lbl-begin_lbl-1 ; length of data block TODO
+dw end_lbl-begin_lbl-1 ; length of data block
 dw 0x0001 ; autostart line number
 dw 0x06dc ; variable area
-db 0xf3 ; checksum
+db 0x67^(end_lbl-begin_lbl-1&0xff)^(end_lbl-begin_lbl-1>>8&0xff) ; checksum
 ;end of header
 
 ;begin data block
@@ -42,15 +42,11 @@ entry0:
     PUSH DE
     RET
 
-; ROM functions
-org 0x0d6b
-ROM_CLS:
-
-org 0x03b5
-ROM_BEEPER:
-
-org 0x4000
-ZX_VIDEO_MEM:
+; ROM functions & constants
+ROM_CLS: equ 0x0d6b
+ROM_BEEPER: equ 0x03b5
+ZX_VIDEO_MEM: equ 0x4000
+ZX_COLOUR_MEM: equ 0x5800
 
 ; decompressor also writes a bit of data here...
 ; bits and pieces of the header + some garbage
@@ -69,7 +65,7 @@ output_addr: ;aka true entry point
     LD ($5C48),A   ; ???
     CALL setwhite ; ;$8009
     LD HL,QRdatabase    ; ;$800C some kind of video data
-    LD DE,$9900    ; ;$800F
+    LD DE,QRscratch; ;$800F
     LD BC,$01C0    ; ;$8012
 copyloop1: ; unrolled... TODO condense with macro
     OR A           ; ;$8015
@@ -246,49 +242,49 @@ copyloop1: ; unrolled... TODO condense with macro
 mainloop:
     LD B,$C8       ; ;$80CB
 
-part1loop:
+demoloop1:
     PUSH BC        ; ;$80CD
     HALT           ; ;$80CE
     CALL part1     ; ;$80CF
     POP BC         ; ;$80D2
-    DJNZ part1loop; ;$80D3
+    DJNZ demoloop1; ;$80D3
 
-part2loop:
+demoloop2:
     PUSH BC        ; ;$80D5
     HALT           ; ;$80D6
     CALL part2     ; ;$80D7
     POP BC         ; ;$80DA
-    DJNZ part2loop ; ;$80DB
+    DJNZ demoloop2 ; ;$80DB
 
     HALT           ; ;$80DD
     CALL part3     ; ;$80DE
     CALL setgray   ; ;$80E1
     CALL initskew; ;$80E4
     LD B,$0A       ; ;$80E7
-unkloop1:
+demoloop3:
     PUSH BC        ; ;$80E9
     CALL speaker; ;$80EA
     CALL displayskew; ;$80ED
     POP BC         ; ;$80F0
-    DJNZ unkloop1 ; ;$80F1
+    DJNZ demoloop3 ; ;$80F1
 
-    CALL initscroll; ;$80F3
+    CALL initscrollsplit; ;$80F3
     LD B,$0F       ; ;$80F6
-unkloop2:
+demoloop4:
     PUSH BC        ; ;$80F8
     CALL speaker; ;$80F9
-    CALL displayscroll; ;$80FC
+    CALL displayscrollsplit; ;$80FC
     POP BC         ; ;$80FF
-    DJNZ unkloop2; ;$8100
+    DJNZ demoloop4; ;$8100
 
-    CALL $86FA     ; ;$8102
+    CALL initscroll1; ;$8102
     LD B,$05       ; ;$8105
-unkloop3:
+demoloop5:
     PUSH BC        ; ;$8107
     CALL speaker; ;$8108
-    CALL $8701     ; ;$810B
+    CALL displayscroll1; ;$810B
     POP BC         ; ;$810E
-    DJNZ unkloop3  ; ;$810F
+    DJNZ demoloop5  ; ;$810F
 
     CALL displaysimple; ;$8111
     CALL statictop     ; ;$8114
@@ -296,39 +292,39 @@ unkloop3:
     CALL staticbottom     ; ;$811A
     CALL setwhite     ; ;$811D
     LD B,$C8       ; ;$8120
-part1loop2:
+demoloop6:
     PUSH BC        ; ;$8122
     HALT           ; ;$8123
     CALL part1     ; ;$8124
     POP BC         ; ;$8127
-    DJNZ part1loop2; ;$8128
+    DJNZ demoloop6; ;$8128
 
     LD B,$64       ; ;$812A
-part4loop:
+demoloop7:
     PUSH BC        ; ;$812C
     HALT           ; ;$812D
     CALL part4     ; ;$812E
     POP BC         ; ;$8131
-    DJNZ part4loop ; ;$8132
+    DJNZ demoloop7 ; ;$8132
 
-    CALL $84CB     ; ;$8134
+    CALL resethdesync2; ;$8134
     LD B,$64       ; ;$8137
-part5loop:
+demoloop8:
     PUSH BC        ; ;$8139
     HALT           ; ;$813A
     CALL part5     ; ;$813B
     POP BC         ; ;$813E
-    DJNZ part5loop; ;$813F
+    DJNZ demoloop8; ;$813F
 
     CALL setgray   ; ;$8141
     CALL initskew; ;$8144
     LD B,$28       ; ;$8147
-unkloop4:
+demoloop9:
     PUSH BC        ; ;$8149
     CALL speaker; ;$814A
     CALL displayskew; ;$814D
     POP BC         ; ;$8150
-    DJNZ unkloop4; ;$8151
+    DJNZ demoloop9; ;$8151
 
     CALL displaytestpattern; ;$8153
     CALL displayAV1; ;$8156
@@ -342,12 +338,12 @@ unkloop4:
     CALL setwhite     ; ;$816E
     CALL displayAV1; ;$8171
     LD B,$32       ; ;$8174
-unkloop5:
+demoloop10:
     PUSH BC        ; ;$8176
     HALT           ; ;$8177
-    CALL $8184     ; ;$8178
+    CALL part1     ; ;$8178
     POP BC         ; ;$817B
-    DJNZ unkloop5; ;$817C
+    DJNZ demoloop10; ;$817C
     CALL setwhite     ; ;$817E
     JP mainloop       ; ;$8181
 
@@ -369,10 +365,10 @@ part2:
     CALL statictop     ; ;$81A6
     CALL staticmiddle     ; ;$81A9
     CALL staticbottom     ; ;$81AC
-    CALL $83B9     ; ;$81AF
+    CALL clearnoiseline; ;$81AF
     CALL incrstatictop     ; ;$81B2
     CALL statictop     ; ;$81B5
-    CALL $8382     ; ;$81B8
+    CALL noiseline     ; ;$81B8
     CALL incrstaticmiddle     ; ;$81BB
     CALL staticmiddle     ; ;$81BE
     CALL incrstaticbottom     ; ;$81C1
@@ -384,7 +380,7 @@ part3:
     CALL statictop     ; ;$81CB
     CALL staticmiddle     ; ;$81CE
     CALL staticbottom     ; ;$81D1
-    CALL $83B9     ; ;$81D4
+    CALL clearnoiseline; ;$81D4
     CALL incrstatictop     ; ;$81D7
     CALL statictop     ; ;$81DA
     CALL incrstaticmiddle     ; ;$81DD
@@ -397,18 +393,18 @@ part4:
     HALT           ; ;$81EA
     CALL speaker; ;$81EB
     CALL statictop     ; ;$81EE
-    CALL $8486     ; ;$81F1
+    CALL hdesync1; ;$81F1
     CALL incrstatictop     ; ;$81F4
     CALL statictop     ; ;$81F7
     CALL staticmiddle     ; ;$81FA
-    CALL $848A     ; ;$81FD
+    CALL hdesync2; ;$81FD
     CALL incrstaticmiddle     ; ;$8200
     CALL staticmiddle     ; ;$8203
     CALL staticbottom     ; ;$8206
-    CALL $848F     ; ;$8209
+    CALL hdesync3     ; ;$8209
     CALL incrstaticbottom     ; ;$820C
     CALL staticbottom     ; ;$820F
-    CALL $84AB     ; ;$8212
+    CALL hdesync4     ; ;$8212
     CALL resethdesync; ;$8215
     RET            ; ;$8218
 
@@ -416,25 +412,25 @@ part5:
     HALT           ; ;$8219
     CALL speaker; ;$821A
     CALL statictop     ; ;$821D
-    CALL $8486     ; ;$8220
+    CALL hdesync1     ; ;$8220
     CALL incrstatictop     ; ;$8223
     CALL statictop     ; ;$8226
     CALL staticmiddle     ; ;$8229
-    CALL $848A     ; ;$822C
+    CALL hdesync2     ; ;$822C
     CALL incrstaticmiddle     ; ;$822F
     CALL staticmiddle     ; ;$8232
     CALL staticbottom     ; ;$8235
-    CALL $848F     ; ;$8238
+    CALL hdesync3     ; ;$8238
     CALL incrstaticbottom     ; ;$823B
     CALL staticbottom     ; ;$823E
-    CALL $84AB     ; ;$8241
-    CALL $84D2     ; ;$8244
+    CALL hdesync4     ; ;$8241
+    CALL movehdesync; ;$8244
     RET            ; ;$8247
 
 setgray: ;8248
 ; set background to black and foreground to gray
-    LD HL,$5800    ; ;$8248
-    LD DE,$5801    ; ;$824B
+    LD HL,ZX_COLOUR_MEM; ;$8248
+    LD DE,ZX_COLOUR_MEM+1; ;$824B
     LD (HL),$07    ; ;$824E
     LD BC,$02FF    ; ;$8250
     LDIR           ; ;$8253
@@ -442,8 +438,8 @@ setgray: ;8248
 
 setwhite: ;8256
 ; set background to black and foreground to white
-    LD HL,$5800    ; base address
-    LD DE,$5801    ; ;$8259
+    LD HL,ZX_COLOUR_MEM;   ; base address
+    LD DE,ZX_COLOUR_MEM+1  ; ;$8259
     LD (HL),$47    ; bright white
     LD BC,$02FF    ; length
     LDIR           ; do copy
@@ -454,8 +450,10 @@ displaysimple:
 displaysimple_alt: ;8267
     LD DE,ZX_VIDEO_MEM; video memory base
     LD B,$2B       ; ;$826A
+simplecopyloop1:
     PUSH BC        ; ;$826C
     LD B,$04       ; ;$826D
+simplecopyloop2:
     PUSH BC        ; ;$826F
     PUSH HL        ; ;$8270
     PUSH DE        ; ;$8271
@@ -492,15 +490,16 @@ displaysimple_alt: ;8267
     LDI            ; ;$82AE
     LDI            ; ;$82B0
     POP DE         ; ;$82B2
-    CALL $83C9     ; ;$82B3
+    CALL check1; ;$82B3
     POP HL         ; ;$82B6
     POP BC         ; ;$82B7
-    DJNZ $826F     ; ;$82B8
+    DJNZ simplecopyloop2; ;$82B8
     LD BC,$0020    ; ;$82BA
     ADD HL,BC      ; ;$82BD
     POP BC         ; ;$82BE
-    DJNZ $826C     ; ;$82BF
+    DJNZ simplecopyloop1; ;$82BF
     LD B,$14       ; ;$82C1
+simplecopyloop3:
     PUSH DE        ; ;$82C3
     XOR A          ; ;$82C4
     LD (DE),A      ; ;$82C5
@@ -568,8 +567,8 @@ displaysimple_alt: ;8267
     LD (DE),A      ; ;$8303
     INC E          ; ;$8304
     POP DE         ; ;$8305
-    CALL $83C9     ; ;$8306
-    DJNZ $82C3     ; ;$8309
+    CALL check1; ;$8306
+    DJNZ simplecopyloop3; ;$8309
     RET            ; ;$830B
 
 speaker:
@@ -586,6 +585,7 @@ speaker:
 statictop: ;831B
     LD HL,$0000    ; address is repeatedly incremented by 5, mod 32
     LD B,$05       ; ;$831E
+statictoploop:
     LD A,(HL)      ; ;$8320
     INC HL         ; ;$8321
     AND $07        ; ;$8322
@@ -597,7 +597,7 @@ statictop: ;831B
     XOR (HL)       ; ;$832A
     LD (DE),A      ; store something
     INC HL         ; ;$832C
-    DJNZ $8320     ; ;$832D
+    DJNZ statictoploop; ;$832D
     RET            ; ;$832F
 
 incrstatictop: ;8330
@@ -614,6 +614,7 @@ incrstatictop: ;8330
 staticmiddle: ;833D
     LD HL,$0200    ; ;staticmiddle
     LD B,$05       ; ;$8340
+staticmiddleloop:
     LD A,(HL)      ; ;$8342
     CPL            ; ;$8343
     INC HL         ; ;$8344
@@ -626,7 +627,7 @@ staticmiddle: ;833D
     XOR (HL)       ; ;$834D
     LD (DE),A      ; ;$834E
     INC HL         ; ;$834F
-    DJNZ $8342     ; ;$8350
+    DJNZ staticmiddleloop; ;$8350
     RET            ; ;$8352
 
 incrstaticmiddle: ;8353
@@ -642,6 +643,7 @@ incrstaticmiddle: ;8353
 staticbottom: ;8360
     LD HL,$0400    ; ;staticbottom
     LD B,$05       ; ;$8363
+staticbottomloop:
     LD A,(HL)      ; ;$8365
     INC HL         ; ;$8366
     AND $07        ; ;$8367
@@ -653,7 +655,7 @@ staticbottom: ;8360
     XOR (HL)       ; ;$836F
     LD (DE),A      ; ;$8370
     INC HL         ; ;$8371
-    DJNZ $8365     ; ;$8372
+    DJNZ staticbottomloop; ;$8372
     RET            ; ;$8374
 
 incrstaticbottom:;8375
@@ -665,11 +667,12 @@ incrstaticbottom:;8375
     RET            ; ;$8381
 ; pair end
 
-    LD HL,$9000    ; ;$8382
+noiseline:
+    LD HL,database; ;$8382
     INC L          ; ;$8385
-    LD ($8383),HL  ; ;$8386
+    LD (noiseline+1),HL  ; ;$8386
     LD A,(HL)      ; ;$8389
-    LD ($83BA),A   ; ;$838A
+    LD (clearnoiseline+1),A   ; ;$838A
     LD H,$89       ; ;$838D
     LD L,A         ; ;$838F
     LD E,(HL)      ; ;$8390
@@ -678,15 +681,18 @@ incrstaticbottom:;8375
     DEC E          ; ;$8393
     DEC E          ; ;$8394
     DEC E          ; ;$8395
+noiseline_addr:
     LD HL,$0400    ; ;$8396
     LD A,L         ; ;$8399
     ADD A,$0D      ; ;$839A
     LD L,A         ; ;$839C
-    LD ($8397),HL  ; ;$839D
+    LD (noiseline_addr+1),HL  ; ;$839D
     LD B,$08       ; ;$83A0
+noiselineloop1:
     PUSH BC        ; ;$83A2
     PUSH DE        ; ;$83A3
     LD B,$20       ; ;$83A4
+noiselineloop2:
     LD A,(HL)      ; ;$83A6
     INC HL         ; ;$83A7
     AND (HL)       ; ;$83A8
@@ -696,41 +702,43 @@ incrstaticbottom:;8375
     XOR C          ; ;$83AC
     LD (DE),A      ; ;$83AD
     INC E          ; ;$83AE
-    DJNZ $83A6     ; ;$83AF
+    DJNZ noiselineloop2; ;$83AF
     POP DE         ; ;$83B1
-    CALL $83C9     ; ;$83B2
+    CALL check1; ;$83B2
     POP BC         ; ;$83B5
-    DJNZ $83A2     ; ;$83B6
+    DJNZ noiselineloop1; ;$83B6
     RET            ; ;$83B8
 
+clearnoiseline:
     LD A,$00       ; ;$83B9
     LD L,A         ; ;$83BB
     LD B,$10       ; ;$83BC
+clearnoiselineloop:
     PUSH BC        ; ;$83BE
     PUSH HL        ; ;$83BF
-    CALL displaynoiseline; ;$83C0
+    CALL clearnoiselineinner; ;$83C0
     POP HL         ; ;$83C3
     INC L          ; ;$83C4
     POP BC         ; ;$83C5
-    DJNZ $83BE     ; ;$83C6
+    DJNZ clearnoiselineloop; ;$83C6
     RET            ; ;$83C8
 
+; some video alignment checks
+check1:
     INC D          ; ;$83C9
     LD A,D         ; ;$83CA
     AND $07        ; ;$83CB
     RET NZ         ; ;$83CD
-
     LD A,E         ; ;$83CE
     ADD A,$20      ; ;$83CF
     LD E,A         ; ;$83D1
     RET C          ; ;$83D2
-
     LD A,D         ; ;$83D3
     SUB $08        ; ;$83D4
     LD D,A         ; ;$83D6
     RET            ; ;$83D7
 
-displaynoiseline:
+clearnoiselineinner:
     LD H,$88       ; ;$83D8
     LD E,(HL)      ; ;$83DA
     LD D,$00       ; ;$83DB
@@ -792,9 +800,10 @@ displayhsync:
     INC H          ; ;$8436
     LD B,(HL)      ; ;$8437
     CP $08         ; ;$8438
-    JR C,$843F     ; ;$843A
+    JR C,displayhsyncskip     ; ;$843A
     INC C          ; ;$843C
     SUB $08        ; ;$843D
+displayhsyncskip:
     EX DE,HL       ; ;$843F
     ADD HL,HL      ; ;$8440
     ADD HL,HL      ; ;$8441
@@ -806,7 +815,7 @@ displayhsync:
     ADD HL,HL      ; ;$8448
     ADD HL,HL      ; ;$8449
     ADD HL,DE      ; ;$844A
-    LD DE,$9103    ; ;$844B
+    LD DE,QRdatabase+3; ;$844B
     ADD HL,DE      ; ;$844E
     LD D,B         ; ;$844F
     LD E,C         ; ;$8450
@@ -840,65 +849,79 @@ displayhsync:
 
 ;weird self modifying code
 ;for horizontal desync
+hdesync1:
     XOR A          ; ;$8486
-    JP $8491       ; ;$8487
+    JP hdesync5       ; ;$8487
+hdesync2:
     LD A,$40       ; ;$848A
-    JP $8491       ; ;$848C
+    JP hdesync5; ;$848C
+hdesync3:
     LD A,$80       ; ;$848F
+hdesync5:
     LD H,$8C       ; ;$8491
     LD L,A         ; ;$8493
+hdesync8:
     LD D,$8D       ; ;$8494
     LD E,A         ; ;$8496
     LD B,$40       ; ;$8497
+hdesync6:
     LD A,(DE)      ; ;$8499
     CP (HL)        ; ;$849A
-    JR Z,$84A4     ; ;$849B
+    JR Z,hdesync7; ;$849B
     PUSH HL        ; ;$849D
     PUSH BC        ; ;$849E
     CALL displayhsync; ;$849F
     POP BC         ; ;$84A2
     POP HL         ; ;$84A3
+hdesync7:
     INC L          ; ;$84A4
     LD E,L         ; ;$84A5
+hdesync9:
     LD D,$8D       ; ;$84A6
-    DJNZ $8499     ; ;$84A8
+    DJNZ hdesync6; ;$84A8
     RET            ; ;$84AA
 
-    LD A,($8492)   ; ;$84AB
+hdesync4:
+    LD A,(hdesync5+1)   ; ;$84AB
     XOR $01        ; ;$84AE
-    LD ($8492),A   ; ;$84B0
-    LD A,($8495)   ; ;$84B3
+    LD (hdesync5+1),A   ; ;$84B0
+    LD A,(hdesync8+1)   ; ;$84B3
     XOR $01        ; ;$84B6
-    LD ($8495),A   ; ;$84B8
-    LD ($84A7),A   ; ;$84BB
+    LD (hdesync8+1),A   ; ;$84B8
+    LD (hdesync9+1),A   ; ;$84BB
     RET            ; ;$84BE
 
 resethdesync:
-    LD A,($8495)   ; ;$84BF
+    LD A,(hdesync8+1)   ; ;$84BF
     LD D,A         ; ;$84C2
     LD E,$00       ; ;$84C3
-    LD HL,$8F00    ; ;$84C5
-    JP $84DF       ; ;$84C8
+    LD HL,database-0x100; ;$84C5
+    JP movehdesync2       ; ;$84C8
 
-    LD HL,$8E00    ; ;$84CB
-    LD ($84D9),HL  ; ;$84CE
+resethdesync2:
+    LD HL,database-0x200; ;$84CB
+    LD (movehdesync3+1),HL  ; ;$84CE
     RET            ; ;$84D1
 
 movehdesync:
-    LD A,($8495)   ; ;$84D2
+    LD A,(hdesync8+1)   ; ;$84D2
     LD D,A         ; ;$84D5
     LD E,$00       ; ;$84D6
-    LD HL,$8E00    ; ;$84D8
+movehdesync3:
+    LD HL,database-0x200; ;$84D8
     INC L          ; ;$84DB
-    LD ($84D9),HL  ; ;$84DC
+    LD (movehdesync3+1),HL  ; ;$84DC
+movehdesync2:
     EXX            ; ;$84DF
+movehdesync4:
     LD HL,$1000    ; ;$84E0
     INC L          ; ;$84E3
-    LD ($84E1),HL  ; ;$84E4
+    LD (movehdesync4+1),HL  ; ;$84E4
     EXX            ; ;$84E7
+movehdesync5:
     LD A,(HL)      ; ;$84E8
     AND A          ; ;$84E9
-    JP Z,$84F6     ; ;$84EA
+    JP Z,movehdesync6     ; ;$84EA
     LD B,A         ; ;$84ED
     EXX            ; ;$84EE
     LD A,(HL)      ; ;$84EF
@@ -907,14 +930,16 @@ movehdesync:
     DEC A          ; ;$84F3
     EXX            ; ;$84F4
     ADD A,B        ; ;$84F5
+movehdesync6:
     LD (DE),A      ; ;$84F6
     INC L          ; ;$84F7
     INC E          ; ;$84F8
-    JP NZ,$84E8    ; ;$84F9
+    JP NZ,movehdesync5; ;$84F9
     RET            ; ;$84FC
 
 displaytestpattern:
-    LD HL,$5800    ; ;$84FD
+    LD HL,ZX_COLOUR_MEM; ;$84FD
+testpattern1:
     LD A,L         ; ;$8500
     CPL            ; ;$8501
     RLCA           ; ;$8502
@@ -928,11 +953,12 @@ displaytestpattern:
     INC HL         ; ;$850B
     LD A,H         ; ;$850C
     CP $5A         ; ;$850D
-    JP NZ,$8500    ; ;$850F
+    JP NZ,testpattern1    ; ;$850F
+testpattern3:
     LD A,L         ; ;$8512
     CPL            ; ;$8513
     AND $04        ; ;$8514
-    JR Z,$8523     ; ;$8516
+    JR Z,testpattern2; ;$8516
     LD A,L         ; ;$8518
     RLCA           ; ;$8519
     AND $38        ; ;$851A
@@ -942,108 +968,80 @@ displaytestpattern:
     RRCA           ; ;$8520
     RRCA           ; ;$8521
     OR C           ; ;$8522
+testpattern2:
     LD (HL),A      ; ;$8523
     INC HL         ; ;$8524
     LD A,L         ; ;$8525
     CP $40         ; ;$8526
-    JP NZ,$8512    ; ;$8528
+    JP NZ,testpattern3; ;$8528
+testpattern5:
     LD A,L         ; ;$852B
     AND $1F        ; ;$852C
     LD C,$00       ; ;$852E
     CP $05         ; ;$8530
-    JP C,$8543     ; ;$8532
+    JP C,testpattern4; ;$8532
     CP $0F         ; ;$8535
-    JP NC,$8543    ; ;$8537
+    JP NC,testpattern4    ; ;$8537
     LD C,$7F       ; ;$853A
     CP $0A         ; ;$853C
-    JP C,$8543     ; ;$853E
+    JP C,testpattern4     ; ;$853E
     LD C,$09       ; ;$8541
+testpattern4:
     LD (HL),C      ; ;$8543
     INC L          ; ;$8544
     LD A,L         ; ;$8545
     CP $E0         ; ;$8546
-    JP NZ,$852B    ; ;$8548
+    JP NZ,testpattern5; ;$8548
     XOR A          ; ;$854B
+testpattern6:
     LD (HL),A      ; ;$854C
     INC L          ; ;$854D
-    JP NZ,$854C    ; ;$854E
+    JP NZ,testpattern6; ;$854E
     RET            ; ;$8551
 
 displayAV1:
-    LD HL,$8571    ; ;$8552
-    LD DE,$5821    ; ;$8555
-    LD B,$04       ; ;$8558
-    PUSH BC        ; ;$855A
-    LD B,$0B       ; ;$855B
-    LD A,(HL)      ; ;$855D
-    AND A          ; ;$855E
-    JP Z,$8563     ; ;$855F
-    LD (DE),A      ; ;$8562
-    INC HL         ; ;$8563
-    INC E          ; ;$8564
-    DJNZ $855D     ; ;$8565
-    EX DE,HL       ; ;$8567
-    LD BC,$0015    ; ;$8568
-    ADD HL,BC      ; ;$856B
-    EX DE,HL       ; ;$856C
-    POP BC         ; ;$856D
-    DJNZ $855A     ; ;$856E
+    LD HL,AV1data; ;$8552
+    LD DE,ZX_COLOUR_MEM+$21    ; ;$8555
+    LD B,$04       ; number of rows
+av1_loop:
+    PUSH BC        ; store row count
+    LD B,$0B       ; number of columns
+av1_drawrow:
+    LD A,(HL)      ; load byte
+    AND A          ; set flags
+    JP Z,av1_empty ; if byte is 0, don't write colour
+    LD (DE),A      ; write colour
+av1_empty:         ; if byte is 0
+    INC HL         ; next data byte
+    INC E          ; next screen pos
+    DJNZ av1_drawrow ; loop while bytes left in row
+    EX DE,HL       ;| move video mem cursor to next row
+    LD BC,$0015    ;| there are 0x15 bytes left in the row
+    ADD HL,BC      ;| after we finish
+    EX DE,HL       ;|
+    POP BC         ; grab row count
+    DJNZ av1_loop  ; loop while rows left to draw
     RET            ; ;$8570
 
-    NOP            ; ;$8571
-    LD H,H         ; ;$8572
-    NOP            ; ;$8573
-    NOP            ; ;$8574
-    LD H,H         ; ;$8575
-    NOP            ; ;$8576
-    LD H,H         ; ;$8577
-    NOP            ; ;$8578
-    NOP            ; ;$8579
-    LD H,H         ; ;$857A
-    NOP            ; ;$857B
-    LD H,H         ; ;$857C
-    NOP            ; ;$857D
-    LD H,H         ; ;$857E
-    NOP            ; ;$857F
-    LD H,H         ; ;$8580
-    NOP            ; ;$8581
-    LD H,H         ; ;$8582
-    NOP            ; ;$8583
-    LD H,H         ; ;$8584
-    LD H,H         ; ;$8585
-    NOP            ; ;$8586
-    LD H,H         ; ;$8587
-    LD H,H         ; ;$8588
-    LD H,H         ; ;$8589
-    NOP            ; ;$858A
-    LD H,H         ; ;$858B
-    NOP            ; ;$858C
-    LD H,H         ; ;$858D
-    NOP            ; ;$858E
-    NOP            ; ;$858F
-    LD H,H         ; ;$8590
-    NOP            ; ;$8591
-    LD H,H         ; ;$8592
-    NOP            ; ;$8593
-    LD H,H         ; ;$8594
-    NOP            ; ;$8595
-    NOP            ; ;$8596
-    LD H,H         ; ;$8597
-    NOP            ; ;$8598
-    NOP            ; ;$8599
-    LD H,H         ; ;$859A
-    LD H,H         ; ;$859B
-    LD H,H         ; ;$859C
+AV1data:;8571
+db $00,$64,$00,$00,$64,$00,$64,$00,$00,$64,$00
+db $64,$00,$64,$00,$64,$00,$64,$00,$64,$64,$00
+db $64,$64,$64,$00,$64,$00,$64,$00,$00,$64,$00
+db $64,$00,$64,$00,$00,$64,$00,$00,$64,$64,$64
+
+skewmem: equ $c900
+skewmem2: equ $efe0
 
 initskew:
-    LD HL,$C900    ; ;$859D
-    LD ($85A5),HL  ; ;$85A0
+    LD HL,skewmem; ;$859D
+    LD (displayskew+1),HL  ; ;$85A0
     RET            ; ;$85A3
 
 displayskew:
-    LD HL,$C900    ; ;$85A4 all nulls from c900... clear screen routine?
+    LD HL,skewmem; ;$85A4
     LD DE,ZX_VIDEO_MEM; ;$85A7 video memory base
     LD B,$30       ; ;$85AA
+skewloop1:
     PUSH BC        ; ;$85AC
     PUSH DE        ; ;$85AD
     LDI            ; ;$85AE
@@ -1078,10 +1076,10 @@ displayskew:
     LDI            ; ;$85E8
     LDI            ; ;$85EA
     LDI            ; ;$85EC
-    LD DE,$EFE0    ; ;$85EE
+    LD DE,skewmem2; ;$85EE
     ADD HL,DE      ; ;$85F1
     POP DE         ; ;$85F2
-    CALL $83C9     ; ;$85F3
+    CALL check1; ;$85F3
     PUSH DE        ; ;$85F6
     LDI            ; ;$85F7
     LDI            ; ;$85F9
@@ -1115,10 +1113,10 @@ displayskew:
     LDI            ; ;$8631
     LDI            ; ;$8633
     LDI            ; ;$8635
-    LD DE,$EFE0    ; ;$8637
+    LD DE,skewmem2; ;$8637
     ADD HL,DE      ; ;$863A
     POP DE         ; ;$863B
-    CALL $83C9     ; ;$863C
+    CALL check1; ;$863C
     PUSH DE        ; ;$863F
     LDI            ; ;$8640
     LDI            ; ;$8642
@@ -1152,10 +1150,10 @@ displayskew:
     LDI            ; ;$867A
     LDI            ; ;$867C
     LDI            ; ;$867E
-    LD DE,$EFE0    ; ;$8680
+    LD DE,skewmem2; ;$8680
     ADD HL,DE      ; ;$8683
     POP DE         ; ;$8684
-    CALL $83C9     ; ;$8685
+    CALL check1; ;$8685
     PUSH DE        ; ;$8688
     LDI            ; ;$8689
     LDI            ; ;$868B
@@ -1192,42 +1190,45 @@ displayskew:
     LD DE,$3000    ; ;$86C9
     ADD HL,DE      ; ;$86CC
     POP DE         ; ;$86CD
-    CALL $83C9     ; ;$86CE
+    CALL check1; ;$86CE
     INC HL         ; ;$86D1
     POP BC         ; ;$86D2
     DEC B          ; ;$86D3
-    JP NZ,$85AC    ; ;$86D4
-    LD HL,($85A5)  ; ;$86D7
+    JP NZ,skewloop1; ;$86D4
+    LD HL,(displayskew+1)  ; ;$86D7
     LD DE,$003B    ; ;$86DA
     ADD HL,DE      ; ;$86DD
-    LD ($85A5),HL  ; ;$86DE
+    LD (displayskew+1),HL  ; ;$86DE
     RET            ; ;$86E1
 
-initscroll:
-    LD HL,$92F4    ; ;$86E2
-    LD ($86EA),HL  ; ;$86E5
+; scroll image vertically, split in two
+initscrollsplit:
+    LD HL,QRdatabase+$2F4    ; ;$86E2
+    LD (displayscrollsplit+1),HL  ; ;$86E5
     RET            ; ;$86E8
 
-displayscroll:
-    LD HL,$92F4    ; ;$86E9
+displayscrollsplit:
+    LD HL,QRdatabase+$2F4    ; ;$86E9
     CALL displaysimple_alt; ;$86EC
-    LD HL,($86EA)  ; ;$86EF
+    LD HL,(displayscrollsplit+1)  ; ;$86EF
     LD DE,$0100    ; ;$86F2
     ADD HL,DE      ; ;$86F5
-    LD ($86EA),HL  ; ;$86F6
+    LD (displayscrollsplit+1),HL  ; ;$86F6
     RET            ; ;$86F9
 
-; unknown
-    LD HL,$97C0    ; ;$86FA
-    LD ($8702),HL  ; ;$86FD
+; scroll image vertically in middle
+initscroll1:
+    LD HL,QRdatabase+$7C0    ; ;$86FA
+    LD (displayscroll1+1),HL  ; ;$86FD
     RET            ; ;$8700
 
-    LD HL,$97C0    ; ;$8701
+displayscroll1:
+    LD HL,QRdatabase+$7C0    ; ;$8701
     CALL displaysimple_alt; ;$8704
-    LD HL,($8702)  ; ;$8707
+    LD HL,(displayscroll1+1)  ; ;$8707
     LD DE,$0040    ; ;$870A
     ADD HL,DE      ; ;$870D
-    LD ($8702),HL  ; ;$870E
+    LD (displayscroll1+1),HL  ; ;$870E
     RET            ; ;$8711
 
 ; TODO convert below into data
@@ -3474,6 +3475,7 @@ displayscroll:
     NOP            ; ;$8FFD
     NOP            ; ;$8FFE
     NOP            ; ;$8FFF
+database:
     NOP            ; ;$9000
     LD BC,$0302    ; ;$9001
     DEC B          ; ;$9004
@@ -5560,6 +5562,9 @@ QRdatabase:
     NOP            ; ;$98FD
     NOP            ; ;$98FE
     NOP            ; ;$98FF
+
+; stores processed QR code data for effects
+QRscratch:
     NOP            ; ;$9900
     NOP            ; ;$9901
     NOP            ; ;$9902
